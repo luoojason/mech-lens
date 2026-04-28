@@ -1,92 +1,88 @@
 # mech-lens
 
-A local visual exploration tool for transformer model internals. Type text, click Analyze, and see attention patterns, layer-by-layer predictions, and token contributions — browser DevTools but for the inside of a transformer.
+**Browser DevTools for the inside of a transformer.**
 
-## UI Layout
+Type a sentence. Click Analyze. See every attention head, watch the model's prediction sharpen layer by layer, and find which tokens drive the final output — no Python notebooks, no boilerplate.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  mech-lens                                                       │
-│  browser DevTools for the inside of a transformer               │
-├────────────────────────────┬────────────────────────────────────┤
-│  INPUT                     │  ATTENTION PATTERNS                │
-│  ┌──────────────────────┐  │  Layer [0 ▾]  Head [0 ▾]          │
-│  │ The Eiffel Tower is  │  │                                    │
-│  │ in                   │  │  ┌──┬──┬──┬──┬──┐  ← to          │
-│  └──────────────────────┘  │  ├──┼──┼──┼──┼──┤                │
-│  [  Analyze  ]             │  ├──┼██┼──┼──┼──┤  from          │
-│                            │  ├──┼──┼██┼──┼──┤    ↓           │
-│  The  Eiffel  Tower  is in │  ├──┼──┼──┼──┼──┤                │
-│  (token chips — click any) │  └──┴──┴──┴──┴──┘                │
-│                            │   white=0.0  deep-blue=1.0        │
-│  LOGIT LENS                │                                    │
-│  ┌───────┬───────┬───────┐ │                                    │
-│  │ Layer │  #1   │  #2   │ │                                    │
-│  │   0   │ the   │  a    │ │                                    │
-│  │   …   │  …    │  …    │ │                                    │
-│  │ 11 ★  │ Paris │France │ │                                    │
-│  └───────┴───────┴───────┘ │                                    │
-│  Top predictions: Paris 82%│                                    │
-│                            │                                    │
-│  TOKEN CONTRIBUTION        │                                    │
-│  The    ██░░░░░░░░  12%    │                                    │
-│  Eiffel ████████░░  31%    │                                    │
-│  Tower  ███████░░░  28%    │                                    │
-│  is     █████░░░░░  18%    │                                    │
-│  in     ███░░░░░░░  11%    │                                    │
-└────────────────────────────┴────────────────────────────────────┘
-```
+> Type `"The Eiffel Tower is in"` → layer 0 guesses `"the"` → layer 11 is 82% confident: `"Paris"`
 
-On mobile (< 768px) the panels stack vertically: Input → Attention → Logit Lens.
+<!-- Add a screen recording GIF here — it's the single biggest driver of stars -->
 
-## Setup
-
-### Backend (Python 3.10+)
-
-> **First run:** GPT-2 small (~500 MB) is downloaded automatically from Hugging Face on startup. Subsequent starts are instant.
+## Quickstart
 
 ```bash
-cd backend
-pip install -r requirements.txt
+# Backend (Python 3.10+) — downloads GPT-2 small (~500 MB) on first run
+cd backend && pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+
+# Frontend (new terminal)
+cd frontend && npm install && npm run dev
+# → http://localhost:5173
 ```
 
-The API is available at `http://localhost:8000`. CPU inference takes roughly 2-5 seconds per request.
+Everything runs locally. No API keys. No data sent anywhere.
 
-### Frontend
+## What you see
 
-```bash
-cd frontend
-npm install
-npm run dev   # http://localhost:5173
+```
+┌────────────────────────┬──────────────────────────────────────────┐
+│  INPUT                 │  ATTENTION PATTERNS                      │
+│  ┌──────────────────┐  │  Layer [0 ▾]  Head [0 ▾]                 │
+│  │ The Eiffel Tower │  │                                           │
+│  │ is in            │  │  ┌──┬──┬──┬──┬──┐  ← to                 │
+│  └──────────────────┘  │  ├──┼──┼──┼──┼──┤                       │
+│  [ Analyze ]           │  ├──┼██┼──┼──┼──┤  from ↓               │
+│                        │  ├──┼──┼██┼──┼──┤                       │
+│  The Eiffel Tower is in│  └──┴──┴──┴──┴──┘                       │
+│  (click any token)     │   white=0.0 → deep-blue=1.0              │
+│                        │                                           │
+│  LOGIT LENS            │                                           │
+│  Layer │  #1    │  #2  │                                           │
+│    0   │  the   │  a   │                                           │
+│    …   │  …     │  …   │                                           │
+│   11★  │  Paris │France│                                           │
+│                        │                                           │
+│  TOKEN CONTRIBUTION    │                                           │
+│  Eiffel ████████  31%  │                                           │
+│  Tower  ███████   28%  │                                           │
+│  is     █████     18%  │                                           │
+└────────────────────────┴──────────────────────────────────────────┘
 ```
 
-Both must be running at the same time.
+### Three panels
 
-## What each panel shows
+**Attention heatmap** — pick any layer (0–11) and head (0–11). Rows = attending *from*, columns = attending *to*. Click a token chip to highlight its full attention row in amber.
 
-**Attention patterns** — For a selected layer and head, shows which tokens each token "looks at." The heatmap rows are source tokens (attending *from*), columns are destination tokens (attending *to*). Cell color encodes weight: white = 0.0, deep blue = 1.0. Click a token chip to highlight its entire attention row in amber.
+**Logit lens** — at each layer the residual stream is projected through the unembedding matrix, showing how the model's best guess evolves from noise to a confident prediction.
 
-**Logit lens** — At each of the 12 transformer layers, the residual stream at the final token position is projected directly through the unembedding matrix (bypassing later layers). This shows how the model's "best guess" evolves layer by layer from mostly noise to a confident prediction.
+**Token contribution** — direct logit attribution: which input tokens pushed the model toward its top prediction, normalized to 100%.
 
-**Token contribution** — Direct logit attribution: each input token's residual stream at the final layer is projected onto the unembedding direction of the top predicted token. The bar chart shows which input tokens contributed most to that prediction.
+## Stack
 
-## Endpoints (backend)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | `{ status, model_loaded }` |
-| GET | `/api/model-info` | Model config (GPT-2, 12 layers, 12 heads, 768 d_model) |
-| POST | `/api/analyze` | Full analysis — returns tokens, attention, logit lens, attribution |
-
-Input is capped at 50 tokens. Empty input returns HTTP 400.
+| | |
+|---|---|
+| Backend | Python · FastAPI · TransformerLens · GPT-2 small (124M) |
+| Frontend | SvelteKit · TypeScript · D3.js |
+| Transport | REST/JSON · runs fully on CPU |
 
 ## Running tests
 
 ```bash
-cd backend
-pip install pytest
-pytest tests/
+cd backend && pip install pytest && pytest tests/
 ```
 
-> Tests load GPT-2 and run a forward pass — expect ~30s on first run while the model downloads.
+4 tests: tokenization, attention shape, row-sum invariant, logit lens depth.
+
+## Endpoints
+
+| Method | Path | Returns |
+|--------|------|---------|
+| `GET` | `/api/health` | `{ status, model_loaded }` |
+| `GET` | `/api/model-info` | model config |
+| `POST` | `/api/analyze` | tokens, attention `[12][12][seq][seq]`, logit lens, attribution |
+
+Input capped at 50 tokens. Empty input → 400.
+
+## Contributing
+
+The model is swappable — any `HookedTransformer`-compatible checkpoint works. PRs welcome for additional analysis methods (activation patching, neuron attribution, etc.).
