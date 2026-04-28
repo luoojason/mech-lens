@@ -1,0 +1,120 @@
+{
+  "project": "mech-lens",
+  "description": "Local visual exploration tool for transformer model internals using FastAPI + TransformerLens backend and SvelteKit + D3.js frontend",
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Backend scaffold",
+      "passes": true,
+      "acceptanceCriteria": [
+        "backend/requirements.txt exists with fastapi, uvicorn, transformer-lens, torch, numpy",
+        "backend/main.py exists with FastAPI app, CORS for localhost:5173, lifespan model loading",
+        "GET /api/health returns {\"status\": \"ok\", \"model_loaded\": true} when model is loaded",
+        "GET /api/model-info returns {\"model\": \"gpt2\", \"n_layers\": 12, \"n_heads\": 12, \"d_model\": 768}",
+        "backend/analysis.py exists with extract_attention, compute_logit_lens, compute_logit_attribution functions"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Analysis endpoint",
+      "passes": true,
+      "acceptanceCriteria": [
+        "POST /api/analyze returns tokens, token_ids, n_layers, n_heads, attention, logit_lens, top_predictions, logit_attribution",
+        "attention field shape is [n_layers][n_heads][seq][seq] and each row sums to 1.0 within 1e-5 tolerance",
+        "logit_lens has exactly 12 entries keyed layer_0 through layer_11, each a list of [token, probability] pairs",
+        "top_predictions is a list of [token, probability] pairs from the final layer",
+        "logit_attribution is a list of floats, one per input token, summing to 1.0",
+        "POST /api/analyze with empty text returns HTTP 400",
+        "POST /api/analyze with text tokenizing to >50 tokens returns HTTP 400 with message 'Input too long: N tokens. Limit is 50.'",
+        "backend/tests/test_analysis.py exists with tokenization test, attention shape test, row-sum test, logit_lens length test"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Frontend scaffold",
+      "passes": true,
+      "acceptanceCriteria": [
+        "frontend/package.json exists with sveltekit, typescript, d3, @types/d3 dependencies",
+        "frontend/svelte.config.js and frontend/vite.config.ts exist",
+        "frontend/src/app.html and frontend/src/app.css exist",
+        "frontend/src/routes/+page.svelte exists as main page",
+        "frontend/src/lib/api.ts exports analyzeText(text: string): Promise<AnalysisResult> with AnalysisResult type",
+        "frontend/src/lib/AttentionHeatmap.svelte, LogitLens.svelte, TokenChips.svelte exist",
+        "npm run build completes without TypeScript errors"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Attention heatmap",
+      "passes": true,
+      "acceptanceCriteria": [
+        "AttentionHeatmap.svelte uses D3.js to render an SVG heatmap with rows=source tokens, cols=destination tokens",
+        "Color scale goes from white (#ffffff) at 0.0 to deep blue (#1e40af) at 1.0",
+        "Token labels appear on both axes",
+        "Hover tooltip shows 'Token A → Token B: 0.342' format",
+        "Layer (0-11) and head (0-11) dropdowns exist in the panel and update the heatmap reactively",
+        "Selected token prop highlights the corresponding row in amber (#f59e0b)"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Logit lens table",
+      "passes": true,
+      "acceptanceCriteria": [
+        "LogitLens.svelte renders a table with exactly 12 rows after analysis (one per layer)",
+        "Table columns are: Layer, #1 prediction (token+%), #2 prediction, #3 prediction",
+        "Probabilities shown as percentages (e.g., '82%') sorted descending per row",
+        "Cell background opacity scales with probability value (higher prob = more opaque/saturated)",
+        "Layer 11 row has a distinct background color marking it as 'Final prediction'",
+        "Below table shows top_predictions as 'Top predictions: Paris 82%, France 5%, London 3%'"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Token interaction",
+      "passes": true,
+      "acceptanceCriteria": [
+        "TokenChips.svelte renders each token as a colored pill",
+        "Clicking a token selects it and updates selectedToken state in parent",
+        "AttentionHeatmap receives selectedToken and highlights that row in amber",
+        "Highlight persists when layer or head dropdown changes"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Logit attribution bar chart",
+      "passes": true,
+      "acceptanceCriteria": [
+        "A bar chart component renders below the logit lens with title 'Token contribution to top prediction'",
+        "One horizontal bar per input token, bar width proportional to attribution score",
+        "Token labels appear above each bar",
+        "Bar widths correctly reflect the logit_attribution values from the API response"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "End-to-end flow",
+      "passes": true,
+      "acceptanceCriteria": [
+        "Loading spinner with 'Analyzing... (~2-5s on CPU)' shows while request is in flight",
+        "Error message displays when API returns 400",
+        "Analyze button is disabled while loading",
+        "All panels (TokenChips, AttentionHeatmap, LogitLens, attribution bar) populate after successful analysis",
+        "Responsive layout: single column on mobile (<768px), two columns on desktop"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "README",
+      "passes": true,
+      "acceptanceCriteria": [
+        "README.md exists at project root",
+        "Contains backend setup section: Python 3.10+ requirement, pip install -r requirements.txt, uvicorn command",
+        "Contains frontend setup section: npm install, npm run dev",
+        "Contains ASCII diagram or screenshot placeholder of UI layout",
+        "Notes first-run model download (~500MB) and expected CPU inference time",
+        "Brief explanation of what each panel shows (attention heatmap, logit lens, token attribution)"
+      ]
+    }
+  ]
+}
