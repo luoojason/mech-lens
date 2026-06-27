@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,9 +25,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="mech-lens", lifespan=lifespan)
 
+_cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -59,5 +62,8 @@ def analyze(req: AnalyzeRequest):
             detail=f"Input too long: {n_tokens} tokens. Limit is 50.",
         )
 
-    result = analyze_text(model, req.text)
+    try:
+        result = analyze_text(model, req.text)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Analysis failed.")
     return result
