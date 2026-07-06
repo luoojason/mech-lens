@@ -35,8 +35,7 @@ def compute_logit_attribution(model: HookedTransformer, cache, logits: torch.Ten
     unembed_dir = model.W_U[:, top_token_id]  # [d_model]
     resid_final = cache["resid_post", model.cfg.n_layers - 1][0]  # [seq, d_model]
     contributions = resid_final @ unembed_dir  # [seq]
-    contributions = torch.abs(contributions)
-    total = contributions.sum()
+    total = contributions.abs().sum()
     if total > 0:
         contributions = contributions / total
     return contributions.tolist()
