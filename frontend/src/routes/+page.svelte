@@ -80,13 +80,13 @@
 				<LogitLens
 					logitLens={result.logit_lens}
 					topPredictions={result.top_predictions}
-					logitAttribution={result.logit_attribution}
+					finalLayerReadout={result.final_layer_readout}
 					tokens={result.tokens}
 				/>
 			{:else}
 				<section class="placeholder-panel">
 					<div class="placeholder-inner">
-						<p>Logit lens and token attribution appear here after analysis</p>
+						<p>Logit lens and final-layer readout appear here after analysis</p>
 					</div>
 				</section>
 			{/if}

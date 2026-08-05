@@ -8,7 +8,14 @@ export interface AnalysisResult {
 	attention: number[][][][];
 	logit_lens: Record<string, [string, number][]>;
 	top_predictions: [string, number][];
-	logit_attribution: number[];
+	/**
+	 * Per-position logit-lens readout of the final layer against the top token,
+	 * in logits. NOT an attribution: only the last entry is the logit the model
+	 * actually predicted from; the rest are diagnostic readouts of positions that
+	 * cannot contribute to it, and they do not decompose anything.
+	 */
+	final_layer_readout: number[];
+	final_layer_readout_unit: string;
 }
 
 export async function analyzeText(text: string): Promise<AnalysisResult> {

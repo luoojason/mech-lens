@@ -1,7 +1,7 @@
 import pytest
 import torch
 from transformer_lens import HookedTransformer
-from analysis import extract_attention, compute_logit_lens, compute_logit_attribution, analyze_text
+from analysis import extract_attention, compute_logit_lens, compute_final_layer_readout, analyze_text
 
 TEST_TEXT = "The Eiffel Tower is in"
 
@@ -45,6 +45,26 @@ def test_attention_row_sum(model_and_cache):
                 assert abs(row_sum - 1.0) < 1e-5, (
                     f"Layer {layer_idx}, head {head_idx}, row {row_idx}: sum={row_sum}"
                 )
+
+
+def test_final_layer_readout_last_position_is_the_real_logit(model_and_cache):
+    """The last entry must BE logits[0, -1, top_token], not a normalized stand-in.
+
+    Guards two past bugs: ln_final was skipped, and the values were abs-normalized
+    to sum to 1.0 so they read as shares of a contribution they never decomposed.
+    """
+    model, tokens, logits, cache = model_and_cache
+    readout = compute_final_layer_readout(model, cache, logits)
+    assert len(readout) == tokens.shape[1]
+
+    top_token_id = int(torch.argmax(logits[0, -1]))
+    true_logit = float(logits[0, -1, top_token_id])
+    assert abs(readout[-1] - true_logit) < 1e-3, (
+        f"last position {readout[-1]} != real logit {true_logit}"
+    )
+
+    # Not normalized: these are logits, so |values| must not sum to 1.
+    assert abs(sum(abs(v) for v in readout) - 1.0) > 1e-6
 
 
 def test_logit_lens_length(model_and_cache):

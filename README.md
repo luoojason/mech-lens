@@ -2,7 +2,7 @@
 
 **Browser DevTools for the inside of a transformer.**
 
-Type a sentence. Click Analyze. See every attention head, watch the model's prediction sharpen layer by layer, and find which tokens drive the final output — no Python notebooks, no boilerplate.
+Type a sentence. Click Analyze. See every attention head, watch the model's prediction sharpen layer by layer, and read the final-layer logit lens position by position — no Python notebooks, no boilerplate.
 
 > Type `"The Eiffel Tower is in"` → layer 0 guesses `"the"` → layer 11 is 82% confident: `"Paris"`
 
@@ -42,10 +42,10 @@ Everything runs locally. No API keys. No data sent anywhere.
 │    …   │  …     │  …   │                                           │
 │   11★  │  Paris │France│                                           │
 │                        │                                           │
-│  TOKEN CONTRIBUTION    │                                           │
-│  Eiffel ████████  31%  │                                           │
-│  Tower  ███████   28%  │                                           │
-│  is     █████     18%  │                                           │
+│  FINAL-LAYER READOUT   │                                           │
+│  Eiffel  ▌██     +1.42 │                                           │
+│  Tower   ▌█      +0.87 │                                           │
+│  in    ★ ▌████   +9.10 │  ← the only causal one                    │
 └────────────────────────┴──────────────────────────────────────────┘
 ```
 
@@ -55,7 +55,9 @@ Everything runs locally. No API keys. No data sent anywhere.
 
 **Logit lens** — at each layer the residual stream is projected through the unembedding matrix, showing how the model's best guess evolves from noise to a confident prediction.
 
-**Token contribution** — direct logit attribution: which input tokens pushed the model toward its top prediction, normalized to 100%.
+**Final-layer readout** — for every position, the logit its final-layer residual stream assigns to the model's top token (`unembed(ln_final(resid_post[-1]))[:, top_token]`), in logits.
+
+This is the logit lens applied across positions, **not** an attribution. Only the last position is unembedded to make the prediction, so only the last bar is the logit the model actually used — it equals `logits[0, -1, top_token]` exactly. The other bars say what each earlier position *would* have predicted for that token; those positions cannot influence the final logit, and the values are not shares of it and do not sum to it. The panel says so in the UI. Per-token *attribution* (e.g. decomposing the final logit over heads and MLPs, or over source tokens through the OV circuits) is not implemented — see Contributing.
 
 ## Stack
 
@@ -71,7 +73,7 @@ Everything runs locally. No API keys. No data sent anywhere.
 cd backend && pip install pytest && pytest tests/
 ```
 
-4 tests: tokenization, attention shape, row-sum invariant, logit lens depth.
+5 tests: tokenization, attention shape, row-sum invariant, logit lens depth, and the final-layer readout invariant (last position must equal the model's real logit, and must not be normalized).
 
 ## Endpoints
 
@@ -79,10 +81,12 @@ cd backend && pip install pytest && pytest tests/
 |--------|------|---------|
 | `GET` | `/api/health` | `{ status, model_loaded }` |
 | `GET` | `/api/model-info` | model config |
-| `POST` | `/api/analyze` | tokens, attention `[12][12][seq][seq]`, logit lens, attribution |
+| `POST` | `/api/analyze` | tokens, attention `[12][12][seq][seq]`, logit lens, `final_layer_readout` (logits, not an attribution) |
 
 Input capped at 50 tokens. Empty input → 400.
 
 ## Contributing
 
 The model is swappable — any `HookedTransformer`-compatible checkpoint works. PRs welcome for additional analysis methods (activation patching, neuron attribution, etc.).
+
+Wanted: **real direct logit attribution.** Decomposing `logits[0, -1, top_token]` over the residual-stream writers at the final position (embedding, each attention head's output, each MLP's output) is the standard, exactly-summing decomposition and is what the "Token contribution" panel used to claim to be. It is not implemented today.

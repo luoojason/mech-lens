@@ -11,7 +11,7 @@
         "backend/main.py exists with FastAPI app, CORS for localhost:5173, lifespan model loading",
         "GET /api/health returns {\"status\": \"ok\", \"model_loaded\": true} when model is loaded",
         "GET /api/model-info returns {\"model\": \"gpt2\", \"n_layers\": 12, \"n_heads\": 12, \"d_model\": 768}",
-        "backend/analysis.py exists with extract_attention, compute_logit_lens, compute_logit_attribution functions"
+        "backend/analysis.py exists with extract_attention, compute_logit_lens, compute_final_layer_readout functions"
       ]
     },
     {
@@ -19,11 +19,11 @@
       "title": "Analysis endpoint",
       "passes": true,
       "acceptanceCriteria": [
-        "POST /api/analyze returns tokens, token_ids, n_layers, n_heads, attention, logit_lens, top_predictions, logit_attribution",
+        "POST /api/analyze returns tokens, token_ids, n_layers, n_heads, attention, logit_lens, top_predictions, final_layer_readout, final_layer_readout_unit",
         "attention field shape is [n_layers][n_heads][seq][seq] and each row sums to 1.0 within 1e-5 tolerance",
         "logit_lens has exactly 12 entries keyed layer_0 through layer_11, each a list of [token, probability] pairs",
         "top_predictions is a list of [token, probability] pairs from the final layer",
-        "logit_attribution is a list of floats, one per input token, summing to 1.0",
+        "final_layer_readout is a list of raw logits, one per input token, and MUST NOT be normalized to sum to 1.0 -- that normalization laundered an arbitrary dot product into something that read as a causal share-of-contribution. Only the LAST position is the logit the model actually predicted from; earlier positions are logit-lens readouts of different positions and are not attributions.",
         "POST /api/analyze with empty text returns HTTP 400",
         "POST /api/analyze with text tokenizing to >50 tokens returns HTTP 400 with message 'Input too long: N tokens. Limit is 50.'",
         "backend/tests/test_analysis.py exists with tokenization test, attention shape test, row-sum test, logit_lens length test"
@@ -88,7 +88,7 @@
         "A bar chart component renders below the logit lens with title 'Token contribution to top prediction'",
         "One horizontal bar per input token, bar width proportional to attribution score",
         "Token labels appear above each bar",
-        "Bar widths correctly reflect the logit_attribution values from the API response"
+        "Bar widths correctly reflect the final_layer_readout logits on a signed zero-baseline scale, the causal (last) position is distinguished, and the panel states that the earlier positions are not attributions"
       ]
     },
     {

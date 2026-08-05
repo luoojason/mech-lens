@@ -30,15 +30,28 @@ def compute_logit_lens(model: HookedTransformer, cache) -> dict:
     return logit_lens
 
 
-def compute_logit_attribution(model: HookedTransformer, cache, logits: torch.Tensor) -> list:
+@torch.no_grad()
+def compute_final_layer_readout(model: HookedTransformer, cache, logits: torch.Tensor) -> list:
+    """Per-position logit-lens readout of the final layer against the top token.
+
+    This is NOT an attribution. For each sequence position p it returns the logit
+    that position's final-layer residual stream assigns to the model's top token:
+
+        readout[p] = unembed(ln_final(resid_post[-1][p]))[top_token_id]
+
+    Only the last position is ever unembedded to produce the model's actual
+    prediction, so readout[-1] is exactly logits[0, -1, top_token_id]. Every other
+    entry is a diagnostic "what would this position have predicted" number; those
+    positions are causally incapable of contributing to the final logit, and the
+    values do not decompose it. Deliberately unnormalized: the raw logits carry
+    their unit and sign so nothing reads as a share-of-contribution.
+    """
     top_token_id = int(torch.argmax(logits[0, -1]))
-    unembed_dir = model.W_U[:, top_token_id]  # [d_model]
-    resid_final = cache["resid_post", model.cfg.n_layers - 1][0]  # [seq, d_model]
-    contributions = resid_final @ unembed_dir  # [seq]
-    total = contributions.abs().sum()
-    if total > 0:
-        contributions = contributions / total
-    return contributions.tolist()
+    resid_final = cache["resid_post", model.cfg.n_layers - 1]  # [1, seq, d_model]
+    # ln_final normalizes each position independently, so this vectorizes over seq.
+    normed = model.ln_final(resid_final)  # [1, seq, d_model]
+    readout = model.unembed(normed)[0, :, top_token_id]  # [seq]
+    return readout.tolist()
 
 
 def analyze_text(model: HookedTransformer, text: str) -> dict:
@@ -50,7 +63,7 @@ def analyze_text(model: HookedTransformer, text: str) -> dict:
         logits, cache = model.run_with_cache(tokens)
         attention = extract_attention(model, cache)
         logit_lens = compute_logit_lens(model, cache)
-        logit_attribution = compute_logit_attribution(model, cache, logits)
+        final_layer_readout = compute_final_layer_readout(model, cache, logits)
 
     final_logits = logits[0, -1]
     probs = torch.softmax(final_logits, dim=-1)
@@ -65,5 +78,8 @@ def analyze_text(model: HookedTransformer, text: str) -> dict:
         "attention": attention,
         "logit_lens": logit_lens,
         "top_predictions": top_predictions,
-        "logit_attribution": logit_attribution,
+        # Per-position logit-lens readout, NOT an attribution. See
+        # compute_final_layer_readout. Only the last entry is the model's real logit.
+        "final_layer_readout": final_layer_readout,
+        "final_layer_readout_unit": "logits",
     }

@@ -1,7 +1,9 @@
 <script lang="ts">
 	export let logitLens: Record<string, [string, number][]> = {};
 	export let topPredictions: [string, number][] = [];
-	export let logitAttribution: number[] = [];
+	// Per-position logit-lens readout of the final layer against the top token, in
+	// logits. NOT an attribution — see the caveat rendered below the chart.
+	export let finalLayerReadout: number[] = [];
 	export let tokens: string[] = [];
 
 	const N_LAYERS = 12;
@@ -19,7 +21,13 @@
 		preds: logitLens[`layer_${i}`] ?? []
 	}));
 
-	$: maxAttribution = Math.max(...logitAttribution, 1e-9);
+	function logitStr(v: number): string {
+		return v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2);
+	}
+
+	// Bars are centred on a zero baseline: these values are signed logits, not shares.
+	$: readoutScale = Math.max(...finalLayerReadout.map((v) => Math.abs(v)), 1e-9);
+	$: lastIndex = finalLayerReadout.length - 1;
 </script>
 
 <section>
@@ -67,23 +75,35 @@
 		{/if}
 	{/if}
 
-	{#if logitAttribution.length > 0}
-		<div class="attribution">
-			<h4>Token contribution to top prediction</h4>
+	{#if finalLayerReadout.length > 0}
+		<div class="readout">
+			<h4>Final-layer logit-lens readout <span class="unit">(logits)</span></h4>
 			<div class="bars">
-				{#each logitAttribution as score, i}
-					<div class="bar-group">
+				{#each finalLayerReadout as value, i}
+					<div class="bar-group" class:is-last={i === lastIndex}>
 						<span class="bar-label">{tokens[i] ?? `T${i}`}</span>
 						<div class="bar-track">
+							<div class="zero-line"></div>
 							<div
 								class="bar-fill"
-								style="width: {(score / maxAttribution) * 100}%"
+								class:negative={value < 0}
+								style="left: {value < 0
+									? 50 - (Math.abs(value) / readoutScale) * 50
+									: 50}%; width: {(Math.abs(value) / readoutScale) * 50}%"
 							></div>
 						</div>
-						<span class="bar-pct">{pct(score)}</span>
+						<span class="bar-value">{logitStr(value)}</span>
 					</div>
 				{/each}
 			</div>
+			<p class="caveat">
+				<strong>Not an attribution.</strong> Only the last row
+				{#if tokens[lastIndex]}(<code>{tokens[lastIndex]}</code>){/if}
+				is the logit the model actually predicted from. The other rows show what
+				each position's final-layer residual <em>would</em> have predicted for that
+				same token — those positions cannot influence the prediction, and these
+				numbers do not add up to it or divide it into shares.
+			</p>
 		</div>
 	{/if}
 </section>
@@ -177,8 +197,33 @@
 		color: #94a3b8;
 	}
 
-	.attribution {
+	.readout {
 		margin-top: 4px;
+	}
+
+	.unit {
+		font-weight: 400;
+		color: #64748b;
+		text-transform: none;
+		letter-spacing: 0;
+	}
+
+	.caveat {
+		margin-top: 12px;
+		font-size: 0.75rem;
+		line-height: 1.5;
+		color: #94a3b8;
+		border-left: 2px solid #f59e0b;
+		padding-left: 10px;
+	}
+
+	.caveat strong {
+		color: #fbbf24;
+	}
+
+	.caveat code {
+		font-family: monospace;
+		color: #e2e8f0;
 	}
 
 	.bars {
@@ -189,7 +234,7 @@
 
 	.bar-group {
 		display: grid;
-		grid-template-columns: 80px 1fr 48px;
+		grid-template-columns: 80px 1fr 56px;
 		align-items: center;
 		gap: 8px;
 	}
@@ -205,22 +250,49 @@
 	}
 
 	.bar-track {
+		position: relative;
 		background: #0f172a;
 		border-radius: 4px;
 		height: 18px;
 		overflow: hidden;
 	}
 
-	.bar-fill {
-		height: 100%;
-		background: linear-gradient(90deg, #3b82f6, #60a5fa);
-		border-radius: 4px;
-		transition: width 0.3s ease;
+	.zero-line {
+		position: absolute;
+		left: 50%;
+		top: 0;
+		bottom: 0;
+		width: 1px;
+		background: #334155;
 	}
 
-	.bar-pct {
+	.bar-fill {
+		position: absolute;
+		top: 0;
+		height: 100%;
+		background: linear-gradient(90deg, #3b82f6, #60a5fa);
+		border-radius: 2px;
+		transition: width 0.3s ease, left 0.3s ease;
+	}
+
+	.bar-fill.negative {
+		background: linear-gradient(90deg, #64748b, #94a3b8);
+	}
+
+	.bar-group.is-last .bar-label {
+		color: #60a5fa;
+		font-weight: 700;
+	}
+
+	.bar-group.is-last .bar-value {
+		color: #60a5fa;
+		font-weight: 600;
+	}
+
+	.bar-value {
 		font-size: 0.75rem;
 		color: #64748b;
 		text-align: right;
+		font-variant-numeric: tabular-nums;
 	}
 </style>
